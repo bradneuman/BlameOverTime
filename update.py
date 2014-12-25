@@ -29,12 +29,21 @@ def GetDiffStats(rev, debug = False):
             print("    # %s\n" % s)
 
 
-    cmd = git_cmd + ['diff',
+    # cmd = git_cmd + ['diff',
+    #                  '-C', # find copies
+    #                  '-M', # find moves
+    #                  '-U0', # don't print extra lines around diff
+    #                  '--no-color',
+    #                  rev+'^', # diff between rev and what came before rev
+    #                  rev
+    #              ]
+
+    cmd = git_cmd + ['show',
                      '-C', # find copies
                      '-M', # find moves
                      '-U0', # don't print extra lines around diff
                      '--no-color',
-                     rev+'^', # diff between rev and what came before rev
+                     # rev+'^', # diff between rev and what came before rev
                      rev
                  ]
 
@@ -42,6 +51,10 @@ def GetDiffStats(rev, debug = False):
     numNewLinesPerFile = {} # key is new file
     numDeletedLinesPerFile = {} # key is new file
     renames = []
+
+    state = -1
+    state_diff_header = 1
+    state_diff_body = 2
 
     oldFile = ''
     newFile = ''
@@ -54,58 +67,71 @@ def GetDiffStats(rev, debug = False):
             if line[:4] == "diff":
                 oldFile = None
                 newFile = None
-            elif line[:3] == '---':
-                if line[:14] != "--- /dev/null":
-                    oldFile = line[6:]
-                    dprint(" old file is %s" % oldFile)
-            elif line[:3] == '+++':
-                newFile = line[6:]
-                dprint(" new file is %s" % newFile)
-                # this comes second
-                if oldFile and oldFile != newFile:
-                    renames.append( (oldFile, newFile) )
+                state = state_diff_header
+                continue
+
+
+            if state == state_diff_header:
+                if line[:3] == '---':
+                    if line[:14] != "--- /dev/null":
+                        oldFile = line[6:]
+                        dprint(" old file is %s" % oldFile)
+                        continue
+                elif line[:3] == '+++':
+                    if line[:14] != "+++ /dev/null":
+                        newFile = line[6:]
+                        dprint(" new file is %s" % newFile)
+                        # this comes second
+                        if oldFile and oldFile != newFile:
+                            renames.append( (oldFile, newFile) )
+                        continue
+
+                elif line[:2] == '@@':
+                    state = state_diff_body
+
+            if state == state_diff_body:
                 
-            elif line[:2] == '@@':
-                # find ending @@
-                endIdx = line.find('@@', 3)
-                if endIdx > 2:
-                    for lineChunk in line[3:endIdx-1].split(' '):
-                        commaIdx = lineChunk.find(',')
-                        if commaIdx >= 0:
-                            try:
-                                newLineInfo = (int(lineChunk[1:commaIdx]), int(lineChunk[commaIdx+1:]))
-                            except ValueError:
-                                dprint(" value error! couldn't parse!")
-                                break # for lineChunk
-                        else:
-                            try:
-                                # if there's one line, no comma is printed
-                                newLineInfo = (int(lineChunk[1:]), 1)
-                            except ValueError:
-                                dprint(" value error! couldn't parse!")
-                                break # for lineChunk
+                if line[:2] == '@@':
+                    # find ending @@
+                    endIdx = line.find('@@', 3)
+                    if endIdx > 2:
+                        for lineChunk in line[3:endIdx-1].split(' '):
+                            commaIdx = lineChunk.find(',')
+                            if commaIdx >= 0:
+                                try:
+                                    newLineInfo = (int(lineChunk[1:commaIdx]), int(lineChunk[commaIdx+1:]))
+                                except ValueError:
+                                    dprint(" value error! couldn't parse!")
+                                    break # for lineChunk
+                            else:
+                                try:
+                                    # if there's one line, no comma is printed
+                                    newLineInfo = (int(lineChunk[1:]), 1)
+                                except ValueError:
+                                    dprint(" value error! couldn't parse!")
+                                    break # for lineChunk
 
 
-                        if newLineInfo[1] > 0:
-                            if lineChunk[0] == '-':
-                                if oldFile not in oldLinesPerFile:
-                                    oldLinesPerFile[oldFile] = []
-                                oldLinesPerFile[oldFile].append(newLineInfo)
-                                dprint("oldLines")
+                            if newLineInfo[1] > 0:
+                                if lineChunk[0] == '-':
+                                    if oldFile not in oldLinesPerFile:
+                                        oldLinesPerFile[oldFile] = []
+                                    oldLinesPerFile[oldFile].append(newLineInfo)
+                                    dprint("oldLines")
 
-            # these are at the bottom ebecause they could fuck up with '---' or '+++'
-            elif line[0] == '+':
-                dprint("line added")
-                nc = 0
-                if newFile in numNewLinesPerFile:
-                    nc = numNewLinesPerFile[newFile]
-                numNewLinesPerFile[newFile] = nc + 1
-            elif line[0] == '-':
-                dprint("line removed")
-                dc = 0
-                if newFile in numDeletedLinesPerFile:
-                    dc = numDeletedLinesPerFile[newFile]
-                numDeletedLinesPerFile[newFile] = dc - 1
+                # these are at the bottom ebecause they could fuck up with '---' or '+++'
+                elif line[0] == '+':
+                    dprint("line added")
+                    nc = 0
+                    if newFile in numNewLinesPerFile:
+                        nc = numNewLinesPerFile[newFile]
+                    numNewLinesPerFile[newFile] = nc + 1
+                elif line[0] == '-':
+                    dprint("line removed")
+                    dc = 0
+                    if oldFile in numDeletedLinesPerFile:
+                        dc = numDeletedLinesPerFile[oldFile]
+                    numDeletedLinesPerFile[oldFile] = dc - 1
 
     return (oldLinesPerFile, numNewLinesPerFile, numDeletedLinesPerFile, renames)
 
@@ -151,10 +177,10 @@ def GetOldBlameStats(rev, oldLinesPerFile, debug = False):
     return linesLost
 
 
-def GetCommitStats(rev):
+def GetCommitStats(rev, debug = False):
     "take a given revision and return a dictionary of new filename -> lines added / lost"
 
-    oldLinesPerFile, numNewLinesPerFile, numDeletedLinesPerFile, renames = GetDiffStats(rev)
+    oldLinesPerFile, numNewLinesPerFile, numDeletedLinesPerFile, renames = GetDiffStats(rev, debug)
 
     # from pprint import pprint
 
@@ -163,18 +189,18 @@ def GetCommitStats(rev):
     # pprint(numDeletedLinesPerFile)
     # pprint(renames)
 
-    linesLost = GetOldBlameStats(rev, oldLinesPerFile)
+    linesLost = GetOldBlameStats(rev, oldLinesPerFile, debug)
 
     # pprint(linesLost)
 
     # do a few checks
-    filenames1 = set(numDeletedLinesPerFile.keys())
-    filenames2 = set(linesLost.keys())
-    if filenames1.difference(filenames2):
-        print "ERROR: not all filenames present in blame and diff for commit '%s'" % rev
-        return None
+    # filenames1 = set(numDeletedLinesPerFile.keys())
+    # filenames2 = set(linesLost.keys())
+    # if filenames1.difference(filenames2):
+    #     print "ERROR: not all filenames present in blame and diff for commit '%s'" % rev
+    #     return None
 
-    for filename in filenames1:
+    for filename in numDeletedLinesPerFile:
         total1 = numDeletedLinesPerFile[filename]
         total2 = sum([num for auth,num in linesLost[filename]])
         if total1 != total2:
@@ -206,3 +232,55 @@ from pprint import pprint
 
 pprint(GetCommitStats(rev))
         
+
+# utility functions for dealing with multiple results
+def CombineStats(lhs, rhs):
+    "combine the two sets of commit stats, store into lhs"
+    for filename in rhs:
+        if filename not in lhs:
+            lhs[filename] = []
+        lhs[filename] = lhs[filename] + rhs[filename]
+
+def SquashStats(stats):
+    "combine authors with the same name, adding their lines. return new result"
+    ret = {}
+
+    for filename in stats:
+        ret[filename] = []
+        blameLines = {}
+        for author, numLines in stats[filename]:
+            nl = 0
+            if author in blameLines:
+                nl = blameLines[author]
+            blameLines[author] = nl + numLines
+
+        for author in blameLines:
+            if blameLines[author] != 0:
+                ret[filename].append( (author, blameLines[author]) )
+
+    return ret
+
+def blameTester():
+    "simulates doing a git blame on all current files, but using the commit by commit"
+    "machinery here"
+
+
+    # just for testing, lets try coming up with the ending blame stats
+    cmd = git_cmd + ['rev-list', 'HEAD', '--reverse']
+    revs = subprocess.check_output(cmd).split('\n')
+
+    total = {}
+
+    for rev in revs:
+        if len(rev) > 8: # sha-1s should be long
+            print rev
+            stats = GetCommitStats(rev)
+            CombineStats(total, stats)
+            total = SquashStats(total)
+
+    # remove empty entries (e.g. files that are deleted)
+    total = {k: v for k,v in total.items() if v}
+
+    return total
+
+pprint(blameTester())
