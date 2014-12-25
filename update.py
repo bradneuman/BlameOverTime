@@ -13,7 +13,7 @@ repo_path = "/Users/bneuman/Documents/code/das-tools"
 
 git_cmd = ['git', '-C', repo_path, '--no-pager']
 
-rev = "1a072335170fb8c8008b7ee1c991faaeaaaf955a"
+rev = "01c2d9c463d1ffee0a1fb6a9c379aa88f76db8f3"
 
 
 def GetDiffStats(rev, debug = False):
@@ -118,3 +118,52 @@ pprint(oldLinesPerFile)
 pprint(numNewLinesPerFile)
 pprint(numDeletedLinesPerFile)
 pprint(renames)
+
+
+# now figure out who to blame those old lines on
+
+def GetOldBlameStats(rev, oldLinesPerFile, debug = False):
+    "Given a revision and some info on lines in the old file from diff stats,\n"
+    "  return a dictionary of filename -> list of (author, lines lost) lines will be negative"
+    def dprint(s):
+        if debug:
+            print("## %s\n" % s)
+
+    blame_cmd = git_cmd + ['blame',
+                           '-w', # ignore whitespace
+                           '-C', # find copies
+                           '-M', # find moves
+                           '--line-porcelain' # print info for each line
+                       ]
+
+    linesLost = {}
+
+    for filename in oldLinesPerFile:
+        dprint("getting stats for '%s'" % filename)
+        linesLost[filename] = []
+
+        cmd = blame_cmd + \
+              [ "-L %d,+%d"% (startLine, numLines) for startLine, numLines in oldLinesPerFile[filename]] + \
+              [rev+"^", '--', filename]
+
+        linesLostPerAuthor = {}
+
+        dprint(" ".join(cmd))
+        for line in subprocess.check_output(cmd).split('\n'):
+            if line[:7] == "author ":
+                author = line[7:]
+                dprint("%s lost a line" % author)
+                ac = 0
+                if author in linesLostPerAuthor:
+                    ac = linesLostPerAuthor[author]
+                linesLostPerAuthor[author] = ac - 1
+
+        for author in linesLostPerAuthor:
+            linesLost[filename].append( (author, linesLostPerAuthor[author]) )
+
+    return linesLost
+
+
+linesLost = GetOldBlameStats(rev, oldLinesPerFile)
+
+pprint(linesLost)
