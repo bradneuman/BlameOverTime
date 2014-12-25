@@ -109,19 +109,6 @@ def GetDiffStats(rev, debug = False):
 
     return (oldLinesPerFile, numNewLinesPerFile, numDeletedLinesPerFile, renames)
 
-
-oldLinesPerFile, numNewLinesPerFile, numDeletedLinesPerFile, renames = GetDiffStats(rev)
-
-from pprint import pprint
-
-pprint(oldLinesPerFile)
-pprint(numNewLinesPerFile)
-pprint(numDeletedLinesPerFile)
-pprint(renames)
-
-
-# now figure out who to blame those old lines on
-
 def GetOldBlameStats(rev, oldLinesPerFile, debug = False):
     "Given a revision and some info on lines in the old file from diff stats,\n"
     "  return a dictionary of filename -> list of (author, lines lost) lines will be negative"
@@ -164,6 +151,58 @@ def GetOldBlameStats(rev, oldLinesPerFile, debug = False):
     return linesLost
 
 
-linesLost = GetOldBlameStats(rev, oldLinesPerFile)
+def GetCommitStats(rev):
+    "take a given revision and return a dictionary of new filename -> lines added / lost"
 
-pprint(linesLost)
+    oldLinesPerFile, numNewLinesPerFile, numDeletedLinesPerFile, renames = GetDiffStats(rev)
+
+    # from pprint import pprint
+
+    # pprint(oldLinesPerFile)
+    # pprint(numNewLinesPerFile)
+    # pprint(numDeletedLinesPerFile)
+    # pprint(renames)
+
+    linesLost = GetOldBlameStats(rev, oldLinesPerFile)
+
+    # pprint(linesLost)
+
+    # do a few checks
+    filenames1 = set(numDeletedLinesPerFile.keys())
+    filenames2 = set(linesLost.keys())
+    if filenames1.difference(filenames2):
+        print "ERROR: not all filenames present in blame and diff for commit '%s'" % rev
+        return None
+
+    for filename in filenames1:
+        total1 = numDeletedLinesPerFile[filename]
+        total2 = sum([num for auth,num in linesLost[filename]])
+        if total1 != total2:
+            print "ERROR: number of blame lines and deleted lines differs for commit '%s'" % rev
+
+    cmd = git_cmd + ['log',
+                     '-n', '1', # only show one enry
+                     '--format=%aN', # just print author name
+                     rev
+                 ]
+    revAuthor = subprocess.check_output(cmd)
+    if revAuthor[-1] == '\n':
+        revAuthor = revAuthor[:-1]
+
+    # print "author of revision is '%s'" % revAuthor
+            
+    ret = linesLost
+
+    # now add the lines added. We don't need to run blame for these becaue we know they'll be blamed on the
+    # author of the revision
+    for filename in numNewLinesPerFile:
+        if filename not in ret: # will happen for new files
+            ret[filename] = []
+        ret[filename].append( (revAuthor, numNewLinesPerFile[filename]) )
+
+    return ret
+
+from pprint import pprint
+
+pprint(GetCommitStats(rev))
+        
