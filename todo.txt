@@ -1,0 +1,85 @@
+
+SQL table structure:
+
+blames:
+repo, commit, file_ref, author, email, lines, time
+
+filenames:
+filename, file_ref
+
+file_refs
+file_ref, ignored
+
+commits: (maybe don't do this one at all, its' easy to look up with git)
+repo, commit, date, timezone, revlist_order
+
+
+SQL would look something like:
+
+SELECT blames.date, blames.author, SUM(blames.lines) FROM blames
+  INNER JOIN file_refs ON blames.file_ref == file_refs.file_ref
+  WHERE blames.author="brad" 
+    AND NOT file_refs.ignored
+  GROUP_BY blames.author
+  ORDER_BY blames.date
+
+
+
+ideally we'd not run the damn blame on each revision, but the problem is that git doesn't know which blame
+lines got removed without looking them up, and there doesn't seem to be a super easy way to do that, without
+running blame. I could try to implement it, but I'm sure I'd get caught up in old lines, new lines,
+etc. Rather just run 50x slower and let it be correct....
+
+
+
+for each commit, starting from the beginning:
+
+add an entry to the commits table. If there was already one there, skip this commit
+
+for each file in ls-tree:
+
+run git blame -w -C -M --porcelain, and parse it like the code in GitPython does. Since we started from the
+beginning, we know that only the latest commit is of interest, so just skip anything that's not that (since we
+already have entries for those! Maybe write some code that tests this, and then disable it later. Should be
+able to see those commits in the commits table). for the ones that are the current commit, create a blames
+entry.
+
+actually, while discarding lines, pay attention to filenames. If there are any that don't match the current
+filename, keep track of this because this signifies a file rename / move. Find the file_ref from the older
+filename, and use that as the current file_ref, but also add an entry to the filenames table with the new
+name. If there are no other filenames, then just check the filenames table and if it exists, use that file_ref
+in the blames row. Otherwise, insert a new entry into file_refs (file_ref field should self-increment), and
+add another new one to filenames with the recently-added file_ref
+
+As an optimiazation, we only need to run this on files touched in the given commit
+
+
+
+You can use `git diff rev rev^` to see the diff for the given rev. usefaul args for git diff:
+-U0 show 0 extra lines around diff
+--name-only onlhy output names of changed files
+--no-color
+-C -M detect copies and moves
+
+run `git diff -C -M -U0 --no-color  rev rev^`, then parse the output:
+
+lines starting with "---" and "+++" should be next to eachother and are filenames. Figure out how to use this
+to detect renames?
+
+Lines starting with "@@" show the line numbers for the preceding file.  e.g.: @@ -252,3 +240,3 @@ means that
+in the old file, 3 lines starting at 252 were modified, and in the new one, 3 lines starting at 240 were
+modified
+
+
+
+--------------------------------------------------------------------------------
+
+ok, whole new plan. Use the diff stuff above. Parse the lines. Run blame with -L on the old rev to see who
+lost lines. Then just count the lines and whoever did the commit gained those lines. Make that as two seperate
+entries. That way a single user who changed code can get points for being finicky
+
+
+--------------------------------------------------------------------------------
+
+Unrealted note: look into textconv when I get back. It looks like it allows you to specify a program to make
+binary diffs nicer. I'm thinking it could be used with xcdump?
