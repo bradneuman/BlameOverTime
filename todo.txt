@@ -2,7 +2,10 @@
 SQL table structure:
 
 blames:
-repo, commit, file_ref, author, email, lines, time
+repo, commit, file_ref, commit_author_ref, author_ref, lines (+ or -), time
+
+authors:
+author_name, email, author_ref
 
 filenames:
 filename, file_ref

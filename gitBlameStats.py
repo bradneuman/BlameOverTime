@@ -25,7 +25,7 @@ class BlameStats:
         "  * a dictionary of old filename -> list of tuple (lineNum, numberOfLines). These are the lines\n"
         "    in the old file that were deleted by this commit\n"
         "  * a dictionary of new filename -> number of lines added by the author\n"
-        "  * a dictionary of new filename -> number of lines removed by the author (will be negative)\n"
+        "  * a dictionary of new filename -> number of lines removed by the author\n"
         "  * a list of tuples of file renames (oldFilename, newFilename)"
 
         cmd = self.git_cmd + ['show', # display commit message and diff
@@ -47,8 +47,8 @@ class BlameStats:
 
         state = state_diff_start
 
-        oldFile = ''
-        newFile = ''
+        oldFile = None
+        newFile = None
 
         data = subprocess.check_output(cmd)
         for line in data.split('\n'):
@@ -108,7 +108,7 @@ class BlameStats:
                                         if oldFile not in oldLinesPerFile:
                                             oldLinesPerFile[oldFile] = []
                                         oldLinesPerFile[oldFile].append(newLineInfo)
-                                        self.dprint("oldLines")
+                                        self.dprint("oldLines (%d, %d)" % (newLineInfo[0], newLineInfo[1]))
 
                     # these are at the bottom ebecause they could fuck up with '---' or '+++'
                     elif line[0] == '+':
@@ -122,14 +122,14 @@ class BlameStats:
                         dc = 0
                         if oldFile in numDeletedLinesPerFile:
                             dc = numDeletedLinesPerFile[oldFile]
-                        numDeletedLinesPerFile[oldFile] = dc - 1
+                        numDeletedLinesPerFile[oldFile] = dc + 1
 
         return (oldLinesPerFile, numNewLinesPerFile, numDeletedLinesPerFile, renames)
 
 
     def GetOldBlameStats(self, rev, oldLinesPerFile):
         "Given a revision and some info on lines in the old file from diff stats,\n"
-        "  return a dictionary of filename -> list of (author, lines lost) lines will be negative"
+        "  return a dictionary of filename -> list of (author, lines lost)"
 
         blame_cmd = self.git_cmd + ['blame',
                                     '-w', # ignore whitespace
@@ -158,15 +158,33 @@ class BlameStats:
                     ac = 0
                     if author in linesLostPerAuthor:
                         ac = linesLostPerAuthor[author]
-                    linesLostPerAuthor[author] = ac - 1
+                    linesLostPerAuthor[author] = ac + 1
 
             for author in linesLostPerAuthor:
                 linesLost[filename].append( (author, linesLostPerAuthor[author]) )
 
         return linesLost
 
+
+    def GetCommitAuthor(self, rev):
+        "return the author of the commit specified by rev"
+        
+        cmd = self.git_cmd + ['log',
+                              '-n', '1', # only show one enry
+                              '--format=%aN', # just print author name
+                              rev]
+        revAuthor = subprocess.check_output(cmd)
+        if revAuthor[-1] == '\n':
+            revAuthor = revAuthor[:-1]
+
+        self.dprint("author of revision is '%s'" % revAuthor)
+
+        return revAuthor
+
+
     def GetCommitStats(self, rev):
-        "take a given revision and return a dictionary of new filename -> lines added / lost"
+        "take a given revision and return a dictionary of:\n"
+        "    new filename -> author -> (lines added, lines removed)"
 
         oldLinesPerFile, numNewLinesPerFile, numDeletedLinesPerFile, renames = self.GetDiffStats(rev)
 
@@ -181,37 +199,34 @@ class BlameStats:
         if self.debug:
             pprint(linesLost)
 
-        # do a few checks
-        # filenames1 = set(numDeletedLinesPerFile.keys())
-        # filenames2 = set(linesLost.keys())
-        # if filenames1.difference(filenames2):
-        #     print "ERROR: not all filenames present in blame and diff for commit '%s'" % rev
-        #     return None
-
         for filename in numDeletedLinesPerFile:
             total1 = numDeletedLinesPerFile[filename]
             total2 = sum([num for auth,num in linesLost[filename]])
             if total1 != total2:
                 print "ERROR: number of blame lines and deleted lines differs for commit '%s'" % rev
 
-        cmd = self.git_cmd + ['log',
-                              '-n', '1', # only show one enry
-                              '--format=%aN', # just print author name
-                              rev]
-        revAuthor = subprocess.check_output(cmd)
-        if revAuthor[-1] == '\n':
-            revAuthor = revAuthor[:-1]
+        ret = {}
 
-        self.dprint("author of revision is '%s'" % revAuthor)
+        revAuthor = self.GetCommitAuthor(rev)
 
-        ret = linesLost
+        # first add the lines that were deleted
+        for filename in linesLost:
+            ret[filename] = {}
 
-        # now add the lines added. We don't need to run blame for these becaue we know they'll be blamed on the
-        # author of the revision
+            if filename in linesLost:
+                for author, lines in linesLost[filename]:
+                    self.dprint("    -= %d to '%s'" % (lines, author))
+                    ret[filename][author] = (0, lines)
+
+        # now add lines added by us for each filename
         for filename in numNewLinesPerFile:
-            if filename not in ret: # will happen for new files
-                ret[filename] = []
-            ret[filename].append( (revAuthor, numNewLinesPerFile[filename]) )
+            if filename not in ret:
+                ret[filename] = {}
+
+            if revAuthor not in ret[filename]:
+                ret[filename][revAuthor] = (numNewLinesPerFile[filename], 0)
+            else:
+                ret[filename][revAuthor] = (numNewLinesPerFile[filename], ret[filename][revAuthor][1])
 
         return ret
 

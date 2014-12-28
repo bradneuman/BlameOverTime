@@ -14,38 +14,37 @@ repo_path = "/Users/bneuman/Documents/code/das-tools"
 #run git with -C reop_path --no-pager
 git_cmd = ['git', '-C', repo_path, '--no-pager']
 
-rev = "01c2d9c463d1ffee0a1fb6a9c379aa88f76db8f3"
+rev = "517430b32693cd138b5b39461d951560850bc9be"
 
 from pprint import pprint
 
-bs = BlameStats(repo_path)
+bs = BlameStats(repo_path, debug = False)
 
-pprint(bs.GetCommitStats(rev))
+# pprint(bs.GetCommitStats(rev))
 
 # utility functions for dealing with multiple results
 def CombineStats(lhs, rhs):
     "combine the two sets of commit stats, store into lhs"
     for filename in rhs:
         if filename not in lhs:
-            lhs[filename] = []
-        lhs[filename] = lhs[filename] + rhs[filename]
+            lhs[filename] = {}
+        for author in rhs[filename]:
+            lTuple = (0, 0)
+            if author in lhs[filename]:
+                lTuple = lhs[filename][author]
+            lhs[filename][author] = tuple( map(sum, zip(lTuple, rhs[filename][author])) )
 
-def SquashStats(stats):
-    "combine authors with the same name, adding their lines. return new result"
+def SquashBlame(stats):
+    "return a new dict from stats with a single total line number, and no entry if it would be 0"
     ret = {}
-
     for filename in stats:
-        ret[filename] = []
-        blameLines = {}
-        for author, numLines in stats[filename]:
-            nl = 0
-            if author in blameLines:
-                nl = blameLines[author]
-            blameLines[author] = nl + numLines
-
-        for author in blameLines:
-            if blameLines[author] != 0:
-                ret[filename].append( (author, blameLines[author]) )
+        for author in stats[filename]:
+            tpl = stats[filename][author]
+            if tpl[0] != tpl[1]:
+                # add it
+                if filename not in ret:
+                    ret[filename] = {}
+                ret[filename][author] = tpl[0] - tpl[1]
 
     return ret
 
@@ -64,11 +63,8 @@ def blameTester():
             print rev
             stats = bs.GetCommitStats(rev)
             CombineStats(total, stats)
-            total = SquashStats(total)
 
-    # remove empty entries (e.g. files that are deleted)
-    total = {k: v for k,v in total.items() if v}
-
-    return total
+    # remove empty entries (i.e. changes that net to 0)
+    return SquashBlame(total)
 
 pprint(blameTester())
