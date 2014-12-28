@@ -81,8 +81,11 @@ class BlameStats:
                             continue
 
                 elif state == state_diff_body:
+                    if line[:3] == '@@@':
+                        self.dprint('merge commit! shouldnt happen, returning empty')
+                        return ({}, {}, {}, [])
 
-                    if line[:2] == '@@':
+                    elif line[:2] == '@@':
                         # find ending @@
                         endIdx = line.find('@@', 3)
                         if endIdx > 2:
@@ -92,15 +95,20 @@ class BlameStats:
                                     try:
                                         newLineInfo = (int(lineChunk[1:commaIdx]), int(lineChunk[commaIdx+1:]))
                                     except ValueError:
-                                        self.dprint(" value error! couldn't parse!")
-                                        break # for lineChunk
+                                        print("ERROR: value error! couldn't parse '%s, %s' from line %s" % (
+                                            lineChunk[1:commaIdx],
+                                            lineChunk[commaIdx+1:],
+                                            line) )
+                                        return None
                                 else:
                                     try:
                                         # if there's one line, no comma is printed
                                         newLineInfo = (int(lineChunk[1:]), 1)
                                     except ValueError:
-                                        self.dprint(" value error! couldn't parse!")
-                                        break # for lineChunk
+                                        print("ERROR: value error! couldn't parse '%s' from line '%s'" % (
+                                            lineChunk[1:],
+                                            line))
+                                        return None
 
 
                                 if newLineInfo[1] > 0:
@@ -201,9 +209,10 @@ class BlameStats:
 
         for filename in numDeletedLinesPerFile:
             total1 = numDeletedLinesPerFile[filename]
-            total2 = sum([num for auth,num in linesLost[filename]])
-            if total1 != total2:
-                print "ERROR: number of blame lines and deleted lines differs for commit '%s'" % rev
+            if filename in linesLost:
+                total2 = sum([num for auth,num in linesLost[filename]])
+                if total1 != total2:
+                    print "ERROR: number of blame lines and deleted lines differs for commit '%s'" % rev
 
         ret = {}
 

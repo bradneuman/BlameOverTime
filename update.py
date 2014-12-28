@@ -9,12 +9,13 @@ import sqlite3
 
 from gitBlameStats import *
 
-repo_path = "/Users/bneuman/Documents/code/das-tools"
+#repo_path = "/Users/bneuman/Documents/code/das-tools"
+repo_path = "/Users/bneuman/Documents/code/bvv4/lib/Anki/drive-engine/drive-basestation"
 
 #run git with -C reop_path --no-pager
 git_cmd = ['git', '-C', repo_path, '--no-pager']
 
-rev = "517430b32693cd138b5b39461d951560850bc9be"
+# rev = "517430b32693cd138b5b39461d951560850bc9be"
 
 from pprint import pprint
 
@@ -48,12 +49,14 @@ def SquashBlame(stats):
 
     return ret
 
-def blameTester():
+def blameTester(limit = None):
     "simulates doing a git blame on all current files, but using the commit by commit"
-    "machinery here"
+    "machinery here. NOTE: this only works if there are no merges in the history"
 
     # just for testing, lets try coming up with the ending blame stats
-    cmd = bs.GetGitCmd() + ['rev-list', 'HEAD', '--reverse']
+    cmd = bs.GetGitCmd() + ['rev-list', 'HEAD', '--reverse', '--no-merges']
+    if limit:
+        cmd = cmd + ['-n', '%d' % limit]
     revs = subprocess.check_output(cmd).split('\n')
 
     total = {}
@@ -71,4 +74,4 @@ def blameTester():
     # remove empty entries (i.e. changes that net to 0)
     return SquashBlame(total)
 
-pprint(blameTester())
+pprint(blameTester(10))
