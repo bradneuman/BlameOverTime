@@ -58,9 +58,13 @@ def blameTester():
 
     total = {}
 
+    from progressTracker import ProgressTracker
+    pt = ProgressTracker(len(revs))
+
     for rev in revs:
+        pt.Update()
         if len(rev) > 8: # sha-1s should be long
-            print rev
+            print rev, pt
             stats = bs.GetCommitStats(rev)
             CombineStats(total, stats)
 
