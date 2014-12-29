@@ -5,73 +5,63 @@
 
 # Requires sqlite3
 
+import os
 import sqlite3
-
 from gitBlameStats import *
+from progressTracker import *
 
-#repo_path = "/Users/bneuman/Documents/code/das-tools"
-repo_path = "/Users/bneuman/Documents/code/bvv4/lib/Anki/drive-engine/drive-basestation"
+repo_name = 'das-tools'
+repo_path = '/Users/bneuman/Documents/code/das-tools'
 
-#run git with -C reop_path --no-pager
-git_cmd = ['git', '-C', repo_path, '--no-pager']
+db_filename = 'blame.db'
+schema_filename = 'schema.sql'
 
-# rev = "517430b32693cd138b5b39461d951560850bc9be"
-
-from pprint import pprint
+db_is_new = not os.path.exists(db_filename)
 
 bs = BlameStats(repo_path, debug = False)
 
-# pprint(bs.GetCommitStats(rev))
+with sqlite3.connect(db_filename) as conn:
+    if db_is_new:
+        print 'Creating new blank databse'
+        with open(schema_filename, 'rt') as f:
+            schema = f.read()
+        conn.executescript(schema)        
 
-# utility functions for dealing with multiple results
-def CombineStats(lhs, rhs):
-    "combine the two sets of commit stats, store into lhs"
-    for filename in rhs:
-        if filename not in lhs:
-            lhs[filename] = {}
-        for author in rhs[filename]:
-            lTuple = (0, 0)
-            if author in lhs[filename]:
-                lTuple = lhs[filename][author]
-            lhs[filename][author] = tuple( map(sum, zip(lTuple, rhs[filename][author])) )
+    revs = bs.GetAllCommits()
+    print "%d total commits in '%s'" % (len(revs), repo_path)
 
-def SquashBlame(stats):
-    "return a new dict from stats with a single total line number, and no entry if it would be 0"
-    ret = {}
-    for filename in stats:
-        for author in stats[filename]:
-            tpl = stats[filename][author]
-            if tpl[0] != tpl[1]:
-                # add it
-                if filename not in ret:
-                    ret[filename] = {}
-                ret[filename][author] = tpl[0] - tpl[1]
+    cur = conn.cursor()
 
-    return ret
+    # get the latest revision in the database
+    cur.execute('select max(ROWID), sha from blames')
+    row = cur.fetchone()
+    latestRev = None
+    if row and row[1]:
+        latestRev = row[1]
+        print "'%s' is the latest rev we have in the databse" % latestRev
 
-def blameTester(limit = None):
-    "simulates doing a git blame on all current files, but using the commit by commit"
-    "machinery here. NOTE: this only works if there are no merges in the history"
+        try:
+            idx = revs.index(latestRev)
 
-    # just for testing, lets try coming up with the ending blame stats
-    cmd = bs.GetGitCmd() + ['rev-list', 'HEAD', '--reverse', '--no-merges']
-    if limit:
-        cmd = cmd + ['-n', '%d' % limit]
-    revs = subprocess.check_output(cmd).split('\n')
+            # revs is in reverse order, so we only need things before idx
+            revs = revs[idx+1:]
+        except ValueError:
+            print "WARNING: latest revision '%s' not found in rev-list" % latestRev
+            pass
 
-    total = {}
+    print 'have %d revisions to update' % len(revs)
 
-    from progressTracker import ProgressTracker
     pt = ProgressTracker(len(revs))
 
     for rev in revs:
-        pt.Update()
-        if len(rev) > 8: # sha-1s should be long
-            print rev, pt
-            stats = bs.GetCommitStats(rev)
-            CombineStats(total, stats)
+        print rev, pt.Update()
+        stats = bs.GetCommitStats(rev)
 
-    # remove empty entries (i.e. changes that net to 0)
-    return SquashBlame(total)
-
-pprint(blameTester(10))
+        for filename in stats:
+            for author in stats[filename]:
+                lines = stats[filename][author]
+                val = (rev, repo_name, filename, author, lines[0], lines[1])
+                # print "inserting:", val
+                cur.execute('insert into blames values (?, ?, ?, ?, ?, ?)', val)
+                
+        

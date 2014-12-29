@@ -45,7 +45,7 @@ class ProgressTracker:
 
         if self.start_time == None or item == 0:
             self.start_time = time.time()
-            return
+            return ''
 
         elapsed = time.time() - self.start_time
         self.timePer = elapsed / float(item)

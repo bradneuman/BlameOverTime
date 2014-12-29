@@ -242,3 +242,15 @@ class BlameStats:
     def GetGitCmd(self):
         "return the git cmd prefix as a list (for subprocess usage)"
         return self.git_cmd
+
+    def GetAllCommits(self, limit = None):
+        "return the revision list, without merges. OPtionally limit the number of commits"
+
+        cmd = self.git_cmd + ['rev-list', 'HEAD', '--reverse', '--no-merges']
+        if limit:
+            cmd = cmd + ['-n', '%d' % limit]
+        revs = subprocess.check_output(cmd).split('\n')
+
+        # only return things long enough to be commits
+        return [r for r in revs if len(r) > 8]
+
