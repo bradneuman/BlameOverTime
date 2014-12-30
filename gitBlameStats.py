@@ -260,3 +260,25 @@ class BlameStats:
         # only return things long enough to be commits
         return [r for r in revs if len(r) > 8]
 
+
+    def GetCommitProperties(self, rev):
+        "returns a tuple of (timestamp, author name) for the given commit"
+        
+        cmd = self.git_cmd + ['log',
+                              rev,
+                              '-n', '1',
+                              '--pretty=format:%at %aN']
+
+        response = subprocess.check_output(cmd)
+        spaceIdx = response.find(' ')
+        if spaceIdx > 0:
+            try:
+                ts = int(response[:spaceIdx])
+                author = response[spaceIdx+1:]
+                return (ts, author)
+            except ValueError:
+                print "ERROR: could not convert log response '%s'" % response
+
+        return (0, '')
+
+        

@@ -30,10 +30,12 @@ with sqlite3.connect(db_filename) as conn:
     cur = conn.cursor()
 
     # get the latest revision in the database
-    cur.execute('select max(ROWID), sha from blames')
+    cur.execute('select max(topo_order), sha from commits')
     row = cur.fetchone()
     latestRev = None
+    lastOrder = 0
     if row and row[1]:
+        lastOrder = int(row[0])
         latestRev = row[1]
 
     revs = bs.GetAllCommits(since=latestRev)
@@ -42,13 +44,24 @@ with sqlite3.connect(db_filename) as conn:
 
     pt = ProgressTracker(len(revs))
 
+    curr_order = lastOrder
+
     for i in range(len(revs)):
         rev = revs[i]
         print rev, pt.Update()
 
+        # first, update the commits table
+        commit_ts, commit_author = bs.GetCommitProperties(rev)
+        val = (rev, curr_order, commit_ts, commit_author)
+        curr_order += 1
+
+        cur.execute('insert into commits values (?, ?, ?, ?)', val)
+
         lastRev = None
         if i > 0:
             lastRev = revs[i-1]
+
+        # now update the main blames table
 
         stats = bs.GetCommitStats(rev, lastRev)
 

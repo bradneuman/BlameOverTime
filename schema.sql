@@ -7,3 +7,9 @@ create table blames (
        lost_lines integer default 0
 );
 
+create table commits (
+       sha text not null,
+       topo_order integer not null,
+       ts integer not null,
+       author text
+);
