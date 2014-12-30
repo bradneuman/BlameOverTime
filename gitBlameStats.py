@@ -247,10 +247,12 @@ class BlameStats:
         "return the git cmd prefix as a list (for subprocess usage)"
         return self.git_cmd
 
-    def GetAllCommits(self, limit = None):
-        "return the revision list, without merges. OPtionally limit the number of commits"
+    def GetAllCommits(self, since = None, limit = None):
+        "return the revision list, without merges since the commit 'since'. Optionally limit the number of commits"
 
-        cmd = self.git_cmd + ['rev-list', 'HEAD', '--reverse', '--no-merges', '--topo-order']
+        cmd = self.git_cmd + ['rev-list', '--reverse', '--no-merges', '--topo-order', 'HEAD']
+        if since:
+            cmd = cmd + ['^' + since]
         if limit:
             cmd = cmd + ['-n', '%d' % limit]
         revs = subprocess.check_output(cmd).split('\n')

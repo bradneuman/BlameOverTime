@@ -27,9 +27,6 @@ with sqlite3.connect(db_filename) as conn:
             schema = f.read()
         conn.executescript(schema)        
 
-    revs = bs.GetAllCommits()
-    print "%d total commits in '%s'" % (len(revs), repo_path)
-
     cur = conn.cursor()
 
     # get the latest revision in the database
@@ -38,16 +35,8 @@ with sqlite3.connect(db_filename) as conn:
     latestRev = None
     if row and row[1]:
         latestRev = row[1]
-        print "'%s' is the latest rev we have in the databse" % latestRev
 
-        try:
-            idx = revs.index(latestRev)
-
-            # revs is in reverse order, so we only need things before idx
-            revs = revs[idx+1:]
-        except ValueError:
-            print "WARNING: latest revision '%s' not found in rev-list" % latestRev
-            pass
+    revs = bs.GetAllCommits(since=latestRev)
 
     print 'have %d revisions to update' % len(revs)
 
