@@ -86,3 +86,16 @@ entries. That way a single user who changed code can get points for being finick
 
 Unrealted note: look into textconv when I get back. It looks like it allows you to specify a program to make
 binary diffs nicer. I'm thinking it could be used with xcdump?
+
+--------------------------------------------------------------------------------
+
+latest issue: merge commits
+
+How I'm handling them now is wrong. I'm ignoring them, but then when I look at the commit after a merge, and
+try to figure out how many lines were lost, I'll look at the merge commit, and I might count lines lost from
+the merge author, when the merge author never got credit for those lines in the first place
+
+Instead, I need to detect if the parent is a merge. If so, I need to look at the *commit* from blame
+line-porcelain. And if it is that merge commit, then I need to check both parents, and take whichever one was
+committed last (since that will have usurped the previous one already). Other idea: since I'm doing these in
+rev-list order, maybe I can just always grab the last commit I did, instead of using the ^ operator in git

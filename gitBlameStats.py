@@ -135,9 +135,12 @@ class BlameStats:
         return (oldLinesPerFile, numNewLinesPerFile, numDeletedLinesPerFile, renames)
 
 
-    def GetOldBlameStats(self, rev, oldLinesPerFile):
+    def GetOldBlameStats(self, rev, lastRev, oldLinesPerFile):
         "Given a revision and some info on lines in the old file from diff stats,\n"
         "  return a dictionary of filename -> list of (author, lines lost)"
+
+        if lastRev == None:
+            return {}
 
         blame_cmd = self.git_cmd + ['blame',
                                     '-w', # ignore whitespace
@@ -154,7 +157,7 @@ class BlameStats:
 
             cmd = blame_cmd + \
                   [ "-L %d,+%d"% (startLine, numLines) for startLine, numLines in oldLinesPerFile[filename]] + \
-                  [rev+"^", '--', filename]
+                  [lastRev, '--', filename]
 
             linesLostPerAuthor = {}
 
@@ -190,9 +193,10 @@ class BlameStats:
         return revAuthor
 
 
-    def GetCommitStats(self, rev):
+    def GetCommitStats(self, rev, lastRev = None):
         "take a given revision and return a dictionary of:\n"
         "    new filename -> author -> (lines added, lines removed)"
+        "lastRev should be the immediately proceeding commit to rev"
 
         oldLinesPerFile, numNewLinesPerFile, numDeletedLinesPerFile, renames = self.GetDiffStats(rev)
 
@@ -202,7 +206,7 @@ class BlameStats:
             pprint(numDeletedLinesPerFile)
             pprint(renames)
 
-        linesLost = self.GetOldBlameStats(rev, oldLinesPerFile)
+        linesLost = self.GetOldBlameStats(rev, lastRev, oldLinesPerFile)
 
         if self.debug:
             pprint(linesLost)
@@ -246,7 +250,7 @@ class BlameStats:
     def GetAllCommits(self, limit = None):
         "return the revision list, without merges. OPtionally limit the number of commits"
 
-        cmd = self.git_cmd + ['rev-list', 'HEAD', '--reverse', '--no-merges']
+        cmd = self.git_cmd + ['rev-list', 'HEAD', '--reverse', '--no-merges', '--topo-order']
         if limit:
             cmd = cmd + ['-n', '%d' % limit]
         revs = subprocess.check_output(cmd).split('\n')

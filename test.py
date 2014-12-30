@@ -18,7 +18,7 @@ from pprint import pprint
 
 bs = BlameStats(repo_path, debug = False)
 
-pprint(bs.GetCommitStats(rev))
+pprint(bs.GetCommitStats(rev, rev+'^'))
 exit(0)
 
 # utility functions for dealing with multiple results
@@ -58,11 +58,16 @@ def blameTester(limit = None):
     from progressTracker import ProgressTracker
     pt = ProgressTracker(len(revs))
 
-    for rev in revs:
+    for i in range(len(revs)):
+        rev = revs[i]
+        lastRev = None
+        if i > 0:
+            lastRev = revs[i-1]
+
         pt.Update()
         if len(rev) > 8: # sha-1s should be long
             print rev, pt
-            stats = bs.GetCommitStats(rev)
+            stats = bs.GetCommitStats(rev, lastRev)
             CombineStats(total, stats)
 
     # remove empty entries (i.e. changes that net to 0)

@@ -53,9 +53,15 @@ with sqlite3.connect(db_filename) as conn:
 
     pt = ProgressTracker(len(revs))
 
-    for rev in revs:
+    for i in range(len(revs)):
+        rev = revs[i]
         print rev, pt.Update()
-        stats = bs.GetCommitStats(rev)
+
+        lastRev = None
+        if i > 0:
+            lastRev = revs[i-1]
+
+        stats = bs.GetCommitStats(rev, lastRev)
 
         for filename in stats:
             for author in stats[filename]:
