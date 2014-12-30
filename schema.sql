@@ -9,6 +9,7 @@ create table blames (
 
 create table commits (
        sha text not null,
+       repository text not null,
        topo_order integer not null,
        ts integer not null,
        author text

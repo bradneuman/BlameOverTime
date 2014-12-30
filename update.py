@@ -13,6 +13,7 @@ from progressTracker import *
 repo_name = 'das-tools'
 repo_path = '/Users/bneuman/Documents/code/das-tools'
 
+
 db_filename = 'blame.db'
 schema_filename = 'schema.sql'
 
@@ -30,7 +31,7 @@ with sqlite3.connect(db_filename) as conn:
     cur = conn.cursor()
 
     # get the latest revision in the database
-    cur.execute('select max(topo_order), sha from commits')
+    cur.execute('select max(topo_order), sha from commits where repository = ?', (repo_name,))
     row = cur.fetchone()
     latestRev = None
     lastOrder = 0
@@ -52,10 +53,10 @@ with sqlite3.connect(db_filename) as conn:
 
         # first, update the commits table
         commit_ts, commit_author = bs.GetCommitProperties(rev)
-        val = (rev, curr_order, commit_ts, commit_author)
+        val = (rev, repo_name, curr_order, commit_ts, commit_author)
         curr_order += 1
 
-        cur.execute('insert into commits values (?, ?, ?, ?)', val)
+        cur.execute('insert into commits values (?, ?, ?, ?, ?)', val)
 
         lastRev = None
         if i > 0:
