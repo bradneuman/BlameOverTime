@@ -99,3 +99,61 @@ Instead, I need to detect if the parent is a merge. If so, I need to look at the
 line-porcelain. And if it is that merge commit, then I need to check both parents, and take whichever one was
 committed last (since that will have usurped the previous one already). Other idea: since I'm doing these in
 rev-list order, maybe I can just always grab the last commit I did, instead of using the ^ operator in git
+
+
+
+This is still messed up. I need to include merges, and figure out how to parse the output properly
+
+
+Nope, still not right. It's closer, but not I'm adding things up wrong. I can't just add in topo-order because
+things happen on branches. E.g. I have to always add a rev to its parent to get a total blame or cumulative
+blame sum, I can't just add it to the last rev in topo-order, because that might be from a different branch
+
+
+
+--------------------------------------------------------------------------------
+OK, I'm an actual fuckup. Here's the real problem. Say your repo looks like:
+
+a--b----d
+ \---c-/
+
+and b and c both delete the same line from a. It will get double counted.
+
+The problem is that when doing a sum of the rows, its valid to add a+b because b^ == a, but you can't add b+c
+because c^ != b.
+
+solution:
+
+In any commit where the last commit in our database is not a parent of the current commit, we need to fall
+back to doing a full blame analysis. To do this, we first compute a cumualtive blame up until the given
+commit. We can store this in a cache table, perhaps. Then we use git blame over the entire file for each
+changed file, and we figure out what the diff needs to look like to get us from the last blame to the new
+one. As an optimization, we could compute the cumulative sum only for the files that changed as well.
+
+
+
+--------------------------------------------------------------------------------
+here's another idea to fix the above:
+
+don't use git show anymore. Go back to using git diff, but use it where the previous revision is the last one
+in the commit table, in topo order.
+
+This is the same as pretending the history is totally flat, which is what we want for display purposes anyway!
+Bring back lastRev!
+
+
+--------------------------------------------------------------------------------
+
+ok, lets try this again. It's actually a mix of both solutions. The merge needs to work the way it did where I
+handled it properly. Using the graph above, b onto a is fine. Then for c, we use the diff, so we pretend c
+applied to b. But then when we do d, we use the merge logic to make it apply to both b and c. Does this double
+count?? Yes, this doesn't work at all.
+
+This doesn't work. Lets think again about doing this where we virtually squash stuff. Maybe we can use
+explicit diffs to skip over regions where things are confusing. Maybe we do a and b, then we ignore c and look
+at a diff between b and d, which includes the work in c. That might work. This whole thing works great with
+linear history, so maybe just ignore the patches where it isn't linear, maybe wrap the whole damn thing up
+into a diff between a and d What if there were another merge after that though? think about this more. Nah,
+this is crap too, because any long lived branch will be totally screwed.
+
+

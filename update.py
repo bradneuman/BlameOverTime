@@ -9,10 +9,10 @@ import os
 import sqlite3
 from gitBlameStats import *
 from progressTracker import *
+import blameDBQuery as query
 
-repo_name = 'das-tools'
-repo_path = '/Users/bneuman/Documents/code/das-tools'
-
+repo_name = 'test'
+repo_path = '/Users/bneuman/test/test-repo'
 
 db_filename = 'blame.db'
 schema_filename = 'schema.sql'
@@ -31,13 +31,12 @@ with sqlite3.connect(db_filename) as conn:
     cur = conn.cursor()
 
     # get the latest revision in the database
-    cur.execute('select max(topo_order), sha from commits where repository = ?', (repo_name,))
-    row = cur.fetchone()
+    row = query.GetLatestRevision(cur, repo_name)
     latestRev = None
     lastOrder = 0
-    if row and row[1]:
-        lastOrder = int(row[0])
-        latestRev = row[1]
+    if row and row[0]:
+        lastOrder = int(row[1])
+        latestRev = row[0]
 
     revs = bs.GetAllCommits(since=latestRev)
 
@@ -45,7 +44,9 @@ with sqlite3.connect(db_filename) as conn:
 
     pt = ProgressTracker(len(revs))
 
-    curr_order = lastOrder
+    curr_order = lastOrder + 1
+
+    stats = query.GetLatestFullBlames(cur, repo_name)
 
     for i in range(len(revs)):
         rev = revs[i]
@@ -64,13 +65,31 @@ with sqlite3.connect(db_filename) as conn:
 
         # now update the main blames table
 
-        stats = bs.GetCommitStats(rev, lastRev)
+        newStats = bs.GetCommitStats(rev)
+
+        for filename in newStats:
+            stats[filename] = newStats[filename]
+
+        filenamesToDelete = []
 
         for filename in stats:
-            for author in stats[filename]:
-                lines = stats[filename][author]
-                val = (rev, repo_name, filename, author, lines[0], lines[1])
-                # print "inserting:", val
-                cur.execute('insert into blames values (?, ?, ?, ?, ?, ?)', val)
+            if stats[filename]:
+                for author in stats[filename]:
+                    lines = stats[filename][author]
+                    val = (rev, repo_name, filename, author, lines)
+                    # print "inserting:", val
+                    cur.execute('insert into full_blames values (?, ?, ?, ?, ?)', val)
+#            else:
+                # # add a row with 0 lines to show that the file is no longer present, then remove it from stats
+                # val = (rev, repo_name, filename, '', 0)
+                # # print "inserting:", val
+                # cur.execute('insert into full_blames values (?, ?, ?, ?, ?)', val)
+
+                # filenamesToDelete.append(filename)
+
+        for filename in filenamesToDelete:
+            del stats[filename]
+
+
                 
         

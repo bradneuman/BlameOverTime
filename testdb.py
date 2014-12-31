@@ -30,7 +30,8 @@ def showCurrBlame(conn):
         lastFilename = filename
 
 def blameOverTime(conn):
-    blame = query.GetBlameOverTime(conn.cursor())
+    # blame = query.GetBlameOverTime(conn.cursor())
+    blame = query.GetFullBlameOverTime(conn.cursor())
     import pprint
     pprint.pprint(blame)
 
