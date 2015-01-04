@@ -48,7 +48,7 @@ def GetBlameOverTime(cursor):
     return ret
 
 
-def GetFullBlameOverTime(cursor):
+def GetFullBlameOverTime(cursor, exclusions):
     "return the whole damn thing. TODO: dont use fetchall, write it out bit by bit"
     "list of (timestamp, sha1, author, num_lines)"
 
@@ -56,15 +56,29 @@ def GetFullBlameOverTime(cursor):
     select commits.ts, commits.repository, commits.sha, full_blames.author, sum(lines)
     from full_blames
     inner join commits on full_blames.sha = commits.sha
+    '''
+
+    for i in range(len(exclusions)):
+        if i == 0:
+            sql = sql + " where "
+        else:
+            sql = sql + " and "
+        sql = sql + "full_blames.filename not like (?)"
+
+    sql = sql + '''
     group by full_blames.sha, full_blames.author
     order by commits.topo_order
     '''
+
+    tpl = tuple(exclusions)
+
+    # print sql, tpl
 
     # build up the cumulative sum as we go
     ret = []
     currLines = {}
 
-    return cursor.execute(sql).fetchall()
+    return cursor.execute(sql, tpl).fetchall()
 
 def GetLatestRevision(cursor, repository):
     "return a tuple of (sha, topo_order) for the latest entry in commits for the given repo"

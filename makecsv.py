@@ -1,13 +1,35 @@
 import blameDBQuery as query
 import sqlite3
 
+import argparse
+
+parser = argparse.ArgumentParser(description = "Create a .csv of the blames over time from the database")
+parser.add_argument('--exclude', metavar='filename',
+                    help="""
+                    exclude patterns specified in filename. Filename is text with one exclusion per
+                    line an exclusion is a string that will be formatted in SQL as
+                    'filename no like <string>'
+                    """,
+                    default = None, nargs='?')
+args = parser.parse_args()
+
 db_filename = 'blame.db'
 csv_filename = 'blame.csv'
+
+exclusions = []
+
+if args.exclude:
+    with open(args.exclude, 'r') as infile:
+        for line in infile:
+            pattern = line.strip()
+            if pattern != '':
+                exclusions.append(pattern)
+
 
 import pylab as plt
 
 with sqlite3.connect(db_filename) as conn:
-    blames = query.GetFullBlameOverTime(conn.cursor())
+    blames = query.GetFullBlameOverTime(conn.cursor(), exclusions)
 
     authors = set([x[3] for x in blames])
 
