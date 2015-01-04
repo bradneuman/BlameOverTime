@@ -45,6 +45,7 @@ class BlameStats:
                                   '-M', # find moves
                                   '-w', # ignore whitespace
                                   '-U0', # don't print extra lines around diff
+                                  '--ignore-submodules',
                                   '--no-color',
                                   rev]
 
@@ -235,7 +236,14 @@ class BlameStats:
         for filename in filenames:
             cmd = blame_cmd + ['--', filename]
             self.dprint(" ".join(cmd))
-            data = subprocess.check_output(cmd)
+
+            try:
+                data = subprocess.check_output(cmd)
+            except subprocess.CalledProcessError as cpe:
+                print "Warning: git failed"
+                print cpe
+                print "continuing anyway..."
+                continue
 
             ret[filename] = {}
 
@@ -257,6 +265,7 @@ class BlameStats:
         cmd = self.git_cmd + ['show', # display commit message and diff
                               '-M', # find moves
                               '--no-color',
+                              '--ignore-submodules',
                               rev]
 
         oldFile = None
@@ -268,6 +277,8 @@ class BlameStats:
 
         renamed_from = 'rename from '
         renamed_to = 'rename to '
+
+        self.dprint(' '.join(cmd))
 
         data = subprocess.check_output(cmd)
         for line in data.split('\n'):
@@ -307,6 +318,8 @@ class BlameStats:
         "a filename with no authors means the file was deleted"
 
         newFiles, deletedFiles = self.GetFilesTouchedByCommit(rev)
+
+        self.dprint("new files: %s" % newFiles)
 
         blames = self.GetFullBlames(rev, newFiles)
 

@@ -22,7 +22,11 @@ args = parser.parse_args()
 repo_path = args.path
 
 if args.name == None:
-    repo_name = os.path.split(repo_path)[1]
+    path_split = os.path.split(repo_path)
+    if path_split[1] == '':
+        # if there is a trailing slash, the last part might be empty, so go up one
+        path_split = os.path.split(path_split[0])
+    repo_name = path_split[1]
 else:
     repo_name = args.name
 
@@ -43,12 +47,14 @@ with sqlite3.connect(db_filename) as conn:
     cur = conn.cursor()
 
     # get the latest revision in the database
-    row = query.GetLatestRevision(cur, repo_name)
+    row = query.GetLatestRevision(cur, repo_name)    
     latestRev = None
     lastOrder = 0
     if row and row[0]:
         lastOrder = int(row[1])
         latestRev = row[0]
+
+    print "lastest revision for '%s' is '%s'" % (repo_name, latestRev)
 
     revs = bs.GetAllCommits(since=latestRev)
 

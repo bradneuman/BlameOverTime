@@ -31,7 +31,7 @@ with sqlite3.connect(db_filename) as conn:
         outfile.write(header + '\n')
 
         for line in blames:
-            print line
+            # print line
             ts = line[0]
             repo = line[1]
             commit = line[2]
