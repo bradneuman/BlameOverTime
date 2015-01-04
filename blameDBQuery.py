@@ -48,37 +48,123 @@ def GetBlameOverTime(cursor):
     return ret
 
 
+def GetAllAuthors(cursor):
+    "return a list of all authors"
+
+    return [tpl[0] for tpl in cursor.execute('select distinct(author) from commits').fetchall()]
+
 def GetFullBlameOverTime(cursor, exclusions):
     "return the whole damn thing. TODO: dont use fetchall, write it out bit by bit"
-    "list of (timestamp, sha1, author, num_lines)"
+    "list of (timestamp, repo, sha1, { author: num_lines} )"
 
-    sql = '''
-    select commits.ts, commits.repository, commits.sha, full_blames.author, sum(lines)
-    from full_blames
-    inner join commits on full_blames.sha = commits.sha
-    '''
+    # go through each repository in the database, and get the blame log for each one
 
-    for i in range(len(exclusions)):
-        if i == 0:
-            sql = sql + " where "
-        else:
-            sql = sql + " and "
-        sql = sql + "full_blames.filename not like (?)"
+    # maps repository -> topo_order -> (ts, commit, { author -> num_lines} )
+    repos = {}
 
-    sql = sql + '''
-    group by full_blames.sha, full_blames.author
-    order by commits.topo_order
-    '''
+    sql = 'select distinct(repository) from commits'
+    data = cursor.execute(sql).fetchall()
+    for row in data:
+        repos[row[0]] = {}
 
-    tpl = tuple(exclusions)
+    print repos
 
-    # print sql, tpl
+    for repo in repos:
 
-    # build up the cumulative sum as we go
+        sql = '''
+        select commits.ts, commits.repository, commits.sha, commits.topo_order, full_blames.author, sum(lines)
+        from full_blames
+        inner join commits on full_blames.sha = commits.sha
+        where commits.repository = (?)
+        '''
+
+        for i in range(len(exclusions)):
+            sql = sql + " and full_blames.filename not like (?) "
+
+        sql = sql + '''
+        group by full_blames.sha, full_blames.author
+        order by commits.topo_order
+        '''
+
+        tpl = tuple([repo] + exclusions)
+
+        print "querying for '%s'..." % repo
+
+        for row in cursor.execute(sql, tpl):
+            ts = row[0]
+            sha = row[2]
+            topoOrder = row[3]
+            author = row[4]
+            numLines = row[5]
+
+            if topoOrder not in repos[repo]:
+                repos[repo][topoOrder] = (ts, sha, {})
+            repos[repo][topoOrder][2][author] = numLines
+
+        # print "got %d commits from '%s'" % (len(repos[repo]), repo)
+
+
+    # now merge the lists. Keep the topographic order whithin each list, but merge based on timestamp
     ret = []
-    currLines = {}
+    repoIdx = {}
+    for repo in repos:
+        repoIdx[repo] = min(repos[repo].keys())
 
-    return cursor.execute(sql, tpl).fetchall()
+    print "merging..."
+
+    # we want each commit entry to have a sum of the work for each author across all repositories. E.g. if the
+    # commit is from repo B, we want to show the number of lines for the author as everything already done in
+    # A + what was just updated in B.
+
+    # this will keep track of the last entry for each repo, so we can add them up properly.
+    # repo -> author -> num_lines
+    currentWork = {}
+    for repo in repos:
+        currentWork[repo] = {}
+
+    # will remove the repo when we hit the end
+    while repoIdx:
+        print repoIdx
+
+        min_times = []
+        for repo in repoIdx:
+            topoOrder = repoIdx[repo]
+            ts = repos[repo][topoOrder][0]
+
+            min_times.append( (ts, repo) )
+
+        # find min timestamp
+        min_entry = min(min_times, key=lambda t: t[0])
+        ts = min_entry[0]
+        repo = min_entry[1]
+
+        # now we are choosing the next entry from repo
+        topoOrder = repoIdx[repo]
+        sha = repos[repo][topoOrder][1]
+        commitWork = repos[repo][topoOrder][2]
+
+        for author in commitWork:
+            # update the currentWork for this repo
+            currentWork[repo][author] = commitWork[author]
+
+        # now create the return data by summing up the current work
+        sumWork = {}
+        for sumRepo in currentWork:
+            for author in currentWork[sumRepo]:
+                ac = 0
+                if author in sumWork:
+                    ac = sumWork[author]
+                sumWork[author] = ac + currentWork[sumRepo][author]
+
+        ret.append( (ts, repo, sha, sumWork) )
+
+        # increment index, and delete it if its not there anymore
+        repoIdx[repo] += 1
+        if repoIdx[repo] not in repos[repo]:
+            print "finished merging %s" % repo
+            del repoIdx[repo]
+
+    return ret
 
 def GetLatestRevision(cursor, repository):
     "return a tuple of (sha, topo_order) for the latest entry in commits for the given repo"

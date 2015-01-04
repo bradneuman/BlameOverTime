@@ -31,7 +31,7 @@ import pylab as plt
 with sqlite3.connect(db_filename) as conn:
     blames = query.GetFullBlameOverTime(conn.cursor(), exclusions)
 
-    authors = set([x[3] for x in blames])
+    authors = query.GetAllAuthors(conn.cursor())
 
     authorToIndex = {}
 
@@ -42,9 +42,6 @@ with sqlite3.connect(db_filename) as conn:
         authorToIndex[author] = num_cols
         num_cols += 1
         header += author + ', '
-
-    lastCommit = None
-    row = [''] * num_cols
 
     dates = []
 
@@ -57,25 +54,16 @@ with sqlite3.connect(db_filename) as conn:
             ts = line[0]
             repo = line[1]
             commit = line[2]
-            author = line[3]
-            blameLines = line[4]
+            authorLines = line[3]
 
-            if commit != lastCommit:
-                if lastCommit:
-                    # write out the old row
-                    outfile.write(', '.join(row) + '\n')
-                row = [''] * num_cols
-                lastCommit = commit
+            row = [''] * num_cols
+            row[0] = str(ts)
+            row[1] = repo
+            for author in authorLines:
+                idx = authorToIndex[author]
+                row[idx] = str(authorLines[author])
 
-            if row[0] == '':
-                row[0] = str(ts)
-                row[1] = repo
-                dates.append(ts)
-            idx = authorToIndex[author]
-            row[idx] = str(blameLines)
-
-        outfile.write(', '.join(row) + '\n')
-
+            outfile.write(', '.join(row) + '\n')
 
     for i in range(1, len(dates)):
         if dates[i] < dates[i-1]:
