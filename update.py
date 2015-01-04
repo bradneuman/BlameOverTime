@@ -10,9 +10,21 @@ import sqlite3
 from gitBlameStats import *
 from progressTracker import *
 import blameDBQuery as query
+import argparse
 
-repo_name = 'test'
-repo_path = '/Users/bneuman/test/test-repo'
+
+parser = argparse.ArgumentParser(description = "Update the blame database for the given repository")
+parser.add_argument('--name', metavar='name', help="specify the repo name. Defaults to the directory name of the path",
+                    default = None, nargs='?')
+parser.add_argument('path', help="path to the repository to update")
+args = parser.parse_args()
+
+repo_path = args.path
+
+if args.name == None:
+    repo_name = os.path.split(repo_path)[1]
+else:
+    repo_name = args.name
 
 db_filename = 'blame.db'
 schema_filename = 'schema.sql'
@@ -90,6 +102,4 @@ with sqlite3.connect(db_filename) as conn:
         for filename in filenamesToDelete:
             del stats[filename]
 
-
-                
-        
+    print pt.Done()

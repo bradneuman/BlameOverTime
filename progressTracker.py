@@ -52,6 +52,21 @@ class ProgressTracker:
 
         return str(self)
 
+    def Done(self):
+        "return a string to print about how long things took"
+
+        if self.start_time == None:
+            return ''
+
+        elapsed = time.time() - self.start_time
+
+        if elapsed > self.time_delay:
+            return "Completed in %s" % str(datetime.timedelta(seconds = elapsed))
+        else:
+            return ''
+
+
+
     def __str__(self):
         if not self.timePer:
             return ''
