@@ -56,15 +56,14 @@ def GetName(nameMap, name):
         return nameStrip
 
 
-def GetAllAuthors(cursor, nameMap):
+def GetAllAuthors(cursor, nameMap = []):
     "return a list of all authors"
 
     names = [tpl[0] for tpl in cursor.execute('select distinct(author) from full_blames').fetchall()]
 
-    if nameMap:
-        nameSet = set()
-        for name in names:
-            nameSet.add( GetName(nameMap, name) )
+    nameSet = set()
+    for name in names:
+        nameSet.add( GetName(nameMap, name) )
 
     return list(nameSet)
 

@@ -3,6 +3,9 @@
 import blameDBQuery as query
 import sqlite3
 
+import numpy as np
+import pylab as plt
+
 import argparse
 
 parser = argparse.ArgumentParser(description = "Create a .csv of the blames over time from the database")
@@ -51,53 +54,38 @@ if args.map_names:
                     name = sp[idx].strip()
                     nameMap[name] = realName
 
-dates = []
-
+Y = None
 
 with sqlite3.connect(db_filename) as conn:
-    blames = query.GetFullBlameOverTime(conn.cursor(), exclusions, nameMap)
-
     authors = query.GetAllAuthors(conn.cursor(), nameMap)
 
     print authors
 
+    blames = query.GetFullBlameOverTime(conn.cursor(), exclusions, nameMap)
+
+    X = np.arange(0, len(blames), 1)
+
     authorToIndex = {}
-
-    num_cols = 3
-
-    header = 'timestamp, repository, commit, '
+    num_cols = 0
     for author in authors:
         authorToIndex[author] = num_cols
         num_cols += 1
-        header += author + ', '
+
+    Y = np.zeros( (len(blames), len(authors)) )
+    print Y.shape
+
+    for rowIdx in range(len(blames)):
+        line = blames[rowIdx]
+
+        ts = line[0]
+        repo = line[1]
+        commit = line[2]
+        authorLines = line[3]
+
+        for author in authorLines:
+            colIdx = authorToIndex[author]
+            Y[rowIdx,colIdx] = authorLines[author]
 
 
-    # columns: timestamp, repo, commit, author0_lines, author1_lines, ...
-    with open(csv_filename, 'w') as outfile:
-        outfile.write(header + '\n')
-
-        for line in blames:
-            # print line
-            ts = line[0]
-            repo = line[1]
-            commit = line[2]
-            authorLines = line[3]
-
-            dates.append(ts)
-
-            row = [''] * num_cols
-            row[0] = str(ts)
-            row[1] = repo
-            row[2] = commit
-            for author in authorLines:
-                idx = authorToIndex[author]
-                row[idx] = str(authorLines[author])
-
-            outfile.write(', '.join(row) + '\n')
-
-    # for i in range(1, len(dates)):
-    #     if dates[i] < dates[i-1]:
-    #         print "uh oh! %d: %d < %d" % (i, dates[i], dates[i-1])
-
-    # plt.plot(range(len(dates)), dates)
-    # plt.show()
+plt.stackplot(X, Y.T)
+plt.show()
