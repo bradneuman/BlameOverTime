@@ -1,3 +1,5 @@
+# Copyright (c) 2015 Brad Neuman
+
 import blameDBQuery as query
 import sqlite3
 
@@ -11,12 +13,25 @@ parser.add_argument('--exclude', metavar='filename',
                     'filename no like <string>'
                     """,
                     default = None, nargs='?')
+parser.add_argument('--map-names', metavar='filename',
+                    help='''
+                    read a mapping of names from 'filename'. Each line is comma seperated. The
+                    first value is the "real" name of the author, and any values after that
+                    will be mapped to the first value. For example, a line of:
+                    Brad Neuman, bneuman, bradneuman
+                    Would take any entries in the database where the author was "bneuman" or
+                    "bradneuman" and would map those to "Brad Neuman"
+                    ''',
+                    default = None, nargs='?')
+                    
+                    
 args = parser.parse_args()
 
 db_filename = 'blame.db'
 csv_filename = 'blame.csv'
 
 exclusions = []
+nameMap = {}
 
 if args.exclude:
     with open(args.exclude, 'r') as infile:
@@ -25,13 +40,27 @@ if args.exclude:
             if pattern != '':
                 exclusions.append(pattern)
 
+if args.map_names:
+    with open(args.map_names, 'r') as infile:
+        for line in infile:
+            sp = line.split(',')
+            if len(sp) > 1:
+                realName = sp[0].strip()
+                for idx in range(1,len(sp)):
+                    name = sp[idx].strip()
+                    nameMap[name] = realName
 
 import pylab as plt
 
-with sqlite3.connect(db_filename) as conn:
-    blames = query.GetFullBlameOverTime(conn.cursor(), exclusions)
+dates = []
 
-    authors = query.GetAllAuthors(conn.cursor())
+
+with sqlite3.connect(db_filename) as conn:
+    blames = query.GetFullBlameOverTime(conn.cursor(), exclusions, nameMap)
+
+    authors = query.GetAllAuthors(conn.cursor(), nameMap)
+
+    print authors
 
     authorToIndex = {}
 
@@ -43,7 +72,6 @@ with sqlite3.connect(db_filename) as conn:
         num_cols += 1
         header += author + ', '
 
-    dates = []
 
     # columns: repo, timestamp, author0_lines, author1_lines, ...
     with open(csv_filename, 'w') as outfile:
@@ -55,6 +83,8 @@ with sqlite3.connect(db_filename) as conn:
             repo = line[1]
             commit = line[2]
             authorLines = line[3]
+
+            dates.append(ts)
 
             row = [''] * num_cols
             row[0] = str(ts)

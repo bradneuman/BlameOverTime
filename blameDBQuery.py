@@ -47,13 +47,28 @@ def GetBlameOverTime(cursor):
 
     return ret
 
+def GetName(nameMap, name):
+    "helper to return a valid name"
+    nameStrip = name.strip()
+    if nameStrip in nameMap:
+        return nameMap[nameStrip]
+    else:
+        return nameStrip
 
-def GetAllAuthors(cursor):
+
+def GetAllAuthors(cursor, nameMap):
     "return a list of all authors"
 
-    return [tpl[0] for tpl in cursor.execute('select distinct(author) from commits').fetchall()]
+    names = [tpl[0] for tpl in cursor.execute('select distinct(author) from full_blames').fetchall()]
 
-def GetFullBlameOverTime(cursor, exclusions):
+    if nameMap:
+        nameSet = set()
+        for name in names:
+            nameSet.add( GetName(nameMap, name) )
+
+    return list(nameSet)
+
+def GetFullBlameOverTime(cursor, exclusions = [], nameMap = {}):
     "return the whole damn thing. TODO: dont use fetchall, write it out bit by bit"
     "list of (timestamp, repo, sha1, { author: num_lines} )"
 
@@ -94,7 +109,7 @@ def GetFullBlameOverTime(cursor, exclusions):
             ts = row[0]
             sha = row[2]
             topoOrder = row[3]
-            author = row[4]
+            author = GetName(nameMap, row[4])
             numLines = row[5]
 
             if topoOrder not in repos[repo]:
