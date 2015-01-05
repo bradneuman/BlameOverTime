@@ -108,4 +108,8 @@ with sqlite3.connect(db_filename) as conn:
         for filename in filenamesToDelete:
             del stats[filename]
 
+        # commit every now and then so we don't lose everything if something goes wrong
+        if i % 20 == 0:
+            conn.commit()
+
     print pt.Done()

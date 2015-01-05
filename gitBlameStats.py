@@ -298,9 +298,9 @@ class BlameStats:
                     elif line[:3] == '+++':
                         if line[:14] != "+++ /dev/null":
                             newFile = line[6:]
-                            files.append(newFile)
+                            files.append(newFile.strip())
                         else:
-                            deletedFiles.append(oldFile)
+                            deletedFiles.append(oldFile.strip())
 
                     elif line[:len(renamed_from)] == renamed_from:
                         deletedFiles.append(line[len(renamed_from):])
