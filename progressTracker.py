@@ -26,6 +26,7 @@ class ProgressTracker:
         # output
         self.index = -1
         self.timePer = None
+        self.lastPrint = None
 
         itemStrWidth = math.ceil(math.log(num_items+1, 10))
 
@@ -65,7 +66,19 @@ class ProgressTracker:
         else:
             return ''
 
+    def ShouldPrint(self):
+        "return true if printing something now seems like a good idea. This doens't work if you print the results"
+        "of the Update() call"
 
+        if self.start_time == None:
+            return False
+
+        if self.lastPrint == None:
+            return True
+
+        elapsed = time.time() - self.lastPrint
+
+        return elapsed > self.time_delay
 
     def __str__(self):
         if not self.timePer:
@@ -76,6 +89,7 @@ class ProgressTracker:
 
         timeLeft = self.timePer * (self.num_items - self.index)
         if timeLeft > 0.0:
+            self.lastPrint = time.time()
             return self.format_str % (self.index, self.num_items, 100.0 * self.index / self.num_items,
                                       str(datetime.timedelta(seconds = timeLeft)))
         else:

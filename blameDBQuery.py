@@ -67,7 +67,7 @@ def GetFullBlameOverTime(cursor, exclusions):
     for row in data:
         repos[row[0]] = {}
 
-    print repos
+    # print repos
 
     for repo in repos:
 
@@ -110,7 +110,7 @@ def GetFullBlameOverTime(cursor, exclusions):
     for repo in repos:
         repoIdx[repo] = min(repos[repo].keys())
 
-    print "merging..."
+    print "merging."
 
     # we want each commit entry to have a sum of the work for each author across all repositories. E.g. if the
     # commit is from repo B, we want to show the number of lines for the author as everything already done in
@@ -124,7 +124,7 @@ def GetFullBlameOverTime(cursor, exclusions):
 
     # will remove the repo when we hit the end
     while repoIdx:
-        print repoIdx
+        # print repoIdx
 
         min_times = []
         for repo in repoIdx:
@@ -161,7 +161,7 @@ def GetFullBlameOverTime(cursor, exclusions):
         # increment index, and delete it if its not there anymore
         repoIdx[repo] += 1
         if repoIdx[repo] not in repos[repo]:
-            print "finished merging %s" % repo
+            # print "finished merging %s" % repo
             del repoIdx[repo]
 
     return ret
