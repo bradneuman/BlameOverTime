@@ -4,21 +4,21 @@
 
 from gitBlameStats import *
 
-repo_path = "/Users/bneuman/test/test-repo"
+repo_path = "/Users/bneuman/Documents/code/bvv4"
 
 #run git with -C reop_path --no-pager
 git_cmd = ['git', '-C', repo_path, '--no-pager']
 
-rev = "c3975d5091068682d1bf734345085e08ed586f38"
+rev = "1547f75a375a002be0d3c72aee43fa3bf0f4eb65"
 
 limit = 10 #None
 
 from pprint import pprint
 
-bs = BlameStats(repo_path, debug = False)
+bs = BlameStats(repo_path, debug = True)
 
-# pprint(bs.GetCommitStats(rev, rev+'^'))
-# exit(0)
+pprint(bs.GetCommitStats(rev))
+exit(0)
 
 # for rev in bs.GetAllCommits():
 #     print rev, bs.GetFilesTouchedByCommit(rev)

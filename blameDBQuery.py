@@ -211,3 +211,71 @@ def GetLatestFullBlames(cursor, repository):
         stats[filename][author] = lines
 
     return stats
+
+def PrintDiffSpikes(cursor, exclusions = [], nameMap = {}, num = 10):
+    "Looks over the full blame and returns large spikes which could be due to files that might want to be exluded"
+
+    blames = GetFullBlameOverTime( cursor, exclusions, nameMap )
+
+    # first sort by author
+
+    # map of author -> list of (repo, sha1, num_lines)
+    blamesByAuthor = {}
+
+    for line in blames:
+        repo = line[1]
+        sha = line[2]
+        authorLines = line[3]
+        for author in authorLines:
+            if author not in blamesByAuthor:
+                blamesByAuthor[author] = []
+            blamesByAuthor[author].append( (repo, sha, authorLines[author]) )
+
+
+    # diff for each author from the previous number of lines
+    # list of tuples of (author, lineDiff, repo, sha)
+    diffs = []
+
+    for author in blamesByAuthor:
+        last = 0
+        for blame in blamesByAuthor[author]:
+            diff = blame[2] - last
+            last = blame[2]
+            diffs.append( (author, diff, blame[0], blame[1]) )
+
+    print "computed %d diffs" % len(diffs)
+
+    diffs.sort( lambda lhs, rhs : -1 if lhs[1] > rhs[1] else 1 )
+
+    print "top %d diff spikes:" % num
+    for d in diffs[:num]:
+        print d
+
+def PrintLargeFiles(cursor, exclusions = [], num = 10):
+    "looks for files that may be causing large spikes in the diff lines"
+
+    sql = '''
+    select filename, repository, MAX(lines) as max_lines
+    from full_blames
+    where 1
+    '''
+    for i in range(len(exclusions)):
+        sql = sql + " and filename not like (?) "
+
+    sql += '''
+    group by filename, repository
+    order by max_lines DESC
+    limit %d''' % num
+
+    print "querying for %d largest files..." % num
+
+    tpl = tuple(exclusions)
+    for row in cursor.execute(sql, tpl):
+        filename = row[0]
+        repo = row[1]
+        lines = row[2]
+
+        print "%s (from %s): %d" % (filename, repo, lines)
+
+
+

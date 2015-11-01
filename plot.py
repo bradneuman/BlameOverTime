@@ -1,12 +1,12 @@
 # Copyright (c) 2015 Brad Neuman
 
-import blameDBQuery as query
-import sqlite3
-
-import numpy as np
-import pylab as plt
-
 import argparse
+import blameDBQuery as query
+import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
+import numpy as np
+import pprint
+import sqlite3
 
 parser = argparse.ArgumentParser(description = "Create a .csv of the blames over time from the database")
 parser.add_argument('--exclude', metavar='filename',
@@ -57,11 +57,21 @@ if args.map_names:
 Y = None
 
 with sqlite3.connect(db_filename) as conn:
-    authors = query.GetAllAuthors(conn.cursor(), nameMap)
-
-    print authors
+    # authors = query.GetAllAuthors(conn.cursor(), nameMap)
+    # print authors
 
     blames = query.GetFullBlameOverTime(conn.cursor(), exclusions, nameMap)
+
+    # sort authors so they are stacked how they will be at the end
+    authors2 = []
+    for author in blames[-1][3]:
+        authors2.append( (author, blames[-1][3][author]) )
+    authors2.sort( lambda x,y : -1 if x[1] > y[1] else 1 )
+
+    authors = [x[0] for x in authors2]
+
+    authorPrint = list(reversed(authors))
+    pprint.pprint(authorPrint)
 
     X = np.arange(0, len(blames), 1)
 
@@ -87,5 +97,15 @@ with sqlite3.connect(db_filename) as conn:
             Y[rowIdx,colIdx] = authorLines[author]
 
 
-plt.stackplot(X, Y.T)
+P = plt.stackplot(X, Y.T)
+
+# # make legend
+# colors = [p.get_facecolor().tolist()[0] for p in P]
+
+# patches = []
+# for c, a in zip(colors, authorLines.keys()):
+#     patches.append( mpatches.Patch(color = c, label = a) )
+
+# plt.legend(handles=patches)
+
 plt.show()
