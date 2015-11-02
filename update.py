@@ -64,46 +64,52 @@ for repo_path in repo_paths:
         if args.dry_run:
             continue
 
-    with sqlite3.connect(db_filename) as conn:
+    conn = sqlite3.connect(db_filename)
+    with conn:
         if db_is_new:
             with open(schema_filename, 'rt') as f:
                 schema = f.read()
-                conn.executescript(schema)        
-
-        cur = conn.cursor()
+                conn.executescript(schema)
+                db_is_new = False
 
         # get the latest revision in the database
-        row = query.GetLatestRevision(cur, repo_name)    
-        latestRev = None
-        lastOrder = 0
-        if row and row[0]:
-            lastOrder = int(row[1])
-            latestRev = row[0]
+        row = query.GetLatestRevision(conn.cursor(), repo_name)    
+    latestRev = None
+    lastOrder = 0
+    if row and row[0]:
+        lastOrder = int(row[1])
+        latestRev = row[0]
 
-        print "lastest revision for '%s' is '%s'" % (repo_name, latestRev)
+    print "lastest revision for '%s' is '%s'" % (repo_name, latestRev)
 
-        revs = bs.GetAllCommits(since=latestRev)
+    revs = bs.GetAllCommits(since=latestRev)
 
-        print 'have %d revisions to update' % len(revs)
+    print 'have %d revisions to update' % len(revs)
 
-        if not args.dry_run:
+    if not args.dry_run:
 
-            pt = ProgressTracker(len(revs))
+        pt = ProgressTracker(len(revs))
 
-            curr_order = lastOrder + 1
+        curr_order = lastOrder + 1
 
-            stats = query.GetLatestFullBlames(cur, repo_name)
+        with conn:
+            stats = query.GetLatestFullBlames(conn.cursor(), repo_name)
 
-            for i in range(len(revs)):
-                rev = revs[i]
+        for i in range(len(revs)):
+            rev = revs[i]
+            if len(repo_paths) > 1:
+                print os.path.basename(repo_path), rev, pt.Update()
+            else:
                 print rev, pt.Update()
 
-                # first, update the commits table
-                commit_ts, commit_author = bs.GetCommitProperties(rev)
-                val = (rev, repo_name, curr_order, commit_ts, commit_author)
-                curr_order += 1
+            # first, update the commits table
+            commit_ts, commit_author = bs.GetCommitProperties(rev)
+            val = (rev, repo_name, curr_order, commit_ts, commit_author)
+            curr_order += 1
 
-                cur.execute('insert into commits values (?, ?, ?, ?, ?)', val)
+            with conn:
+
+                conn.cursor().execute('insert into commits values (?, ?, ?, ?, ?)', val)
 
                 lastRev = None
                 if i > 0:
@@ -124,7 +130,8 @@ for repo_path in repo_paths:
                             lines = stats[filename][author]
                             val = (rev, repo_name, filename, author, lines)
                             # print "inserting:", val
-                            cur.execute('insert into full_blames values (?, ?, ?, ?, ?)', val)
+                            conn.cursor().execute('insert into full_blames values (?, ?, ?, ?, ?)', val)
+
         #            else:
                         # # add a row with 0 lines to show that the file is no longer present, then remove it from stats
                         # val = (rev, repo_name, filename, '', 0)
@@ -140,4 +147,4 @@ for repo_path in repo_paths:
                 if i % 20 == 0:
                     conn.commit()
 
-            print pt.Done()
+        print pt.Done()
