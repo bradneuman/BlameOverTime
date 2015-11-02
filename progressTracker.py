@@ -3,6 +3,7 @@
 import time
 import datetime
 import math
+import collections
 
 class ProgressTracker:
     """
@@ -25,13 +26,34 @@ class ProgressTracker:
 
         # output
         self.index = -1
-        self.timePer = None
+
+        # keep a rolling window of the times and durations 
+        # stores a tuple of (start_time, dt) for convenience
+        self.window = collections.deque()
+        self.window_size = 10
+
+        # this holds the average dt for everything before the window
+        self.pre_window_dt = 0.0
+
         self.lastPrint = None
 
         itemStrWidth = math.ceil(math.log(num_items+1, 10))
 
         self.format_str = '# %%%dd / %%%dd (%%5.2f%%%%) ETA: %%s' % (itemStrWidth, itemStrWidth)
         
+    def GetWeightedDt(self):
+        "returns the dt (time per item) estiamted as a weighted average"
+
+        if self.index > 0:
+            # weigth some on the most recent 10, the rest on the older ones
+            num_old = self.index - len(self.window)
+            if num_old > 0:
+                return 0.7 * self.pre_window_dt + 0.3 * sum([ w[1] for w in self.window ]) * (1.0 / len(self.window))
+            else:
+                return sum([ w[1] for w in self.window ]) * (1.0 / len(self.window))
+
+        else:
+            return 0.0
         
     def Update(self, itemInput = None):
         "tell the progress tracker that we are on the given number out of the previously specified number"
@@ -44,12 +66,30 @@ class ProgressTracker:
 
         self.index = item
 
-        if self.start_time == None or item == 0:
-            self.start_time = time.time()
-            return ''
+        currTime = time.time()
 
-        elapsed = time.time() - self.start_time
-        self.timePer = elapsed / float(item)
+        dt = 0.0
+        if len(self.window) > 0:
+            dt = currTime - self.window[-1][0]
+        elif self.start_time != None:
+            dt = currTime - self.start_time
+
+        if self.start_time != None:
+            self.window.append( (currTime, dt) )
+
+        while len(self.window) > self.window_size:
+            w_time, w_dt = self.window.popleft()
+            # update self.pre_window_dt
+            num_old = self.index - len(self.window) - 1
+            if num_old <= 0:
+                self.pre_window_dt = w_dt
+            else:
+                new_num = num_old + 1
+                self.pre_window_dt = self.pre_window_dt * ( (new_num - 1.0) / new_num) + (1.0 / new_num) * w_dt
+
+        if self.start_time == None or item == 0:
+            self.start_time = currTime
+            return ''
 
         return str(self)
 
@@ -81,13 +121,15 @@ class ProgressTracker:
         return elapsed > self.time_delay
 
     def __str__(self):
-        if not self.timePer:
+        timePer = self.GetWeightedDt()
+
+        if timePer == 0:
             return ''
 
-        if self.timePer * self.index < self.time_delay:
+        if timePer * self.index < self.time_delay:
             return ''
 
-        timeLeft = self.timePer * (self.num_items - self.index)
+        timeLeft = timePer * (self.num_items - self.index)
         if timeLeft > 0.0:
             self.lastPrint = time.time()
             return self.format_str % (self.index, self.num_items, 100.0 * self.index / self.num_items,
